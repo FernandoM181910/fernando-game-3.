@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<meta name="theme-color" content="#071426"><title>Fernando Game 2.0</title>
+<style>
+*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#071426;color:#fff;font-family:system-ui,Arial;touch-action:none}#scene{position:absolute;inset:0;width:100%;height:100%;display:block}
+.hud{position:absolute;inset:0;padding:10px;display:flex;flex-direction:column;justify-content:space-between;pointer-events:none}.top,.bottom{display:flex;justify-content:space-between;align-items:flex-start;gap:7px}.bottom{align-items:end}.pill{background:#06162de0;border:1px solid #ffffff38;border-radius:13px;padding:7px 10px;font-size:13px;font-weight:800;backdrop-filter:blur(6px)}.pill small{display:block;color:#a9c8dc;font-size:9px;text-transform:uppercase;letter-spacing:.08em}.gold{color:#ffd34e}.green{color:#70f2b6}.controls{display:flex;gap:7px;pointer-events:auto}.ctrl{width:54px;height:54px;border:1px solid #ffffff66;border-radius:16px;background:#0b2a4ddd;color:white;font-size:22px;font-weight:900;touch-action:none}
+.overlay{position:absolute;inset:0;background:#041126c9;display:flex;align-items:center;justify-content:center;padding:16px;overflow:auto}.hidden{display:none!important}.card{width:min(460px,100%);max-height:94dvh;overflow:auto;background:linear-gradient(150deg,#153b62,#08182e);border:1px solid #57dcff77;border-radius:22px;padding:20px;text-align:center;box-shadow:0 18px 60px #0009}.logo{font-size:clamp(28px,8vw,43px);font-weight:1000;letter-spacing:-2px;text-shadow:0 4px #07527b}.logo span{color:#ffd34e}.muted{color:#b7d1e3;font-size:13px;line-height:1.45}.btn{width:100%;padding:13px;border:0;border-radius:13px;margin-top:9px;background:linear-gradient(90deg,#16bce5,#3977ff);color:white;font-size:16px;font-weight:900}.btn.alt{background:#ffffff13;border:1px solid #ffffff40;font-size:14px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:12px 0}.tile{background:#06152c99;border-radius:13px;padding:10px}.tile b{display:block;font-size:22px;color:#ffd34e}.tabs{display:flex;gap:6px;margin:12px 0}.tab{flex:1;padding:9px 4px;border:1px solid #ffffff33;border-radius:10px;background:#ffffff10;color:#fff;font-weight:800;font-size:12px}.tab.active{background:#167eaf}.rowitem{display:flex;justify-content:space-between;align-items:center;text-align:left;background:#06152c99;padding:10px;border-radius:12px;margin:7px 0;font-size:13px}.tiny{font-size:10px;color:#9dbbd0;margin-top:10px}#toast{position:absolute;top:25%;left:50%;transform:translateX(-50%);padding:10px 16px;border-radius:30px;background:#06152df2;border:1px solid #4be6ff;opacity:0;transition:.2s;pointer-events:none;font-weight:900;white-space:nowrap}
+</style>
+</head>
+<body>
+<canvas id="scene"></canvas>
+<div class="hud">
+ <div class="top">
+  <div class="pill"><small>Distancia</small><span id="score">0</span> m</div>
+  <div class="pill"><small>Monedas</small><span id="coins" class="gold">0</span> 🟡</div>
+  <div class="pill"><small>Puntos</small><span id="points" class="green">0</span> ⭐</div>
+ </div>
+ <div class="bottom"><div class="pill"><small>Fernando Game</small><span id="record">Récord: 0 m</span></div>
+  <div class="controls"><button class="ctrl" id="left">◀</button><button class="ctrl" id="jump">▲</button><button class="ctrl" id="right">▶</button></div>
+ </div>
+</div>
+<div id="toast"></div>
+<div class="overlay" id="menu"><div class="card">
+ <div class="logo">FERNANDO <span>GAME</span></div><p class="muted">Corre por la ciudad, esquiva obstáculos, recoge monedas y gana puntos virtuales.</p>
+ <div class="grid"><div class="tile">Récord<b id="mRecord">0 m</b></div><div class="tile">Puntos disponibles<b id="mPoints">0</b></div></div>
+ <button class="btn" id="start">▶ JUGAR</button><div class="tabs"><button class="tab" data-page="shop">🛒 Tienda</button><button class="tab" data-page="rank">🏆 Récords</button><button class="tab" data-page="profile">👤 Perfil</button></div>
+ <div id="panel" class="muted">Controles: desliza a los lados para cambiar de carril y hacia arriba para saltar. También puedes usar los botones.</div>
+ <p class="tiny">Los puntos y premios de esta versión son locales y virtuales. No son dinero ni recargas reales.</p>
+ </div></div>
+<div class="overlay hidden" id="finish"><div class="card"><div class="logo">¡FIN DE <span>CARRERA!</span></div><p class="muted">Buen intento. Tus monedas se convierten en puntos.</p><div class="grid"><div class="tile">Distancia<b id="fScore">0 m</b></div><div class="tile">Ganaste<b id="fEarn">0 ⭐</b></div></div><button class="btn" id="retry">↻ VOLVER A JUGAR</button><button class="btn alt" id="back">Menú principal</button></div></div>
+<script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+<script>
+(()=>{'use strict';
+const $=id=>document.getElementById(id);let scene,camera,renderer,player,road,clock,objects=[],decor=[],state='menu',lane=1,target=1,jump=0,jumpV=0,dist=0,coins=0,points=+(localStorage.fg_points||0),best=+(localStorage.fg_best||0),speed=17,spawn=0,toastTimer;
+const laneX=[-2.15,0,2.15];
+function hud(){ $('score').textContent=Math.floor(dist);$('coins').textContent=coins;$('points').textContent=points;$('record').textContent='Récord: '+best+' m';$('mRecord').textContent=best+' m';$('mPoints').textContent=points}
+function toast(t){$('toast').textContent=t;$('toast').style.opacity=1;clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('toast').style.opacity=0,1000)}
+function mat(color,rough=.7,metal=0){return new THREE.MeshStandardMaterial({color,roughness:rough,metalness:metal})}
+function box(w,h,d,color,x,y,z){let m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),mat(color));m.position.set(x,y,z);scene.add(m);return m}
+function init3D(){
+ scene=new THREE.Scene();scene.background=new THREE.Color(0x91d9f5);scene.fog=new THREE.Fog(0x91d9f5,28,105);
+ camera=new THREE.PerspectiveCamera( sixty(),innerWidth/innerHeight,.1,150);camera.position.set(0,6.4,12);camera.lookAt(0,1,-7);
+ renderer=new THREE.WebGLRenderer({canvas:$('scene'),antialias:true});renderer.setPixelRatio(Math.min(devicePixelRatio,2));renderer.setSize(innerWidth,innerHeight);renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+ scene.add(new THREE.HemisphereLight(0xffffff,0x496078,2));let sun=new THREE.DirectionalLight(0xffffff,2.2);sun.position.set(-5,12,8);sun.castShadow=true;scene.add(sun);
+ let ground=new THREE.Mesh(new THREE.PlaneGeometry(100,150),mat(0x235344));ground.rotation.x=-Math.PI/2;ground.position.set(0,-.12,-35);scene.add(ground);
+ road=new THREE.Mesh(new THREE.PlaneGeometry(8.2,150),mat(0x303b4b));road.rotation.x=-Math.PI/2;road.position.set(0,-.08,-35);scene.add(road);
+ for(let x of [-1.36,1.36]){let line=new THREE.Mesh(new THREE.BoxGeometry(.055,.025,150),mat(0xd5e8f5));line.position.set(x,.01,-35);scene.add(line)}
+ // City blocks along both sides
+ for(let z=-90;z<18;z+=9){for(let side of [-1,1]){let h=4+Math.random()*12,w=2+Math.random()*2;let b=new THREE.Mesh(new THREE.BoxGeometry(w,h,3),mat([0x315778,0x42617a,0x244765,0x54738b][Math.floor(Math.random()*4)]));b.position.set(side*(7+Math.random()*3),h/2,z);scene.add(b);decor.push(b)}}
+ player=new THREE.Group();
+ let body=new THREE.Mesh(new THREE.BoxGeometry(.8,1.05,.48),mat(0x13bfe8));body.position.y=1.25;player.add(body);
+ let head=new THREE.Mesh(new THREE.SphereGeometry(.34,18,14),mat(0xf0c49c));head.position.y=2.05;player.add(head);
+ let hair=new THREE.Mesh(new THREE.SphereGeometry(.35,16,10),mat(0x202b3c));hair.scale.y=.45;hair.position.set(0,2.28,0);player.add(hair);
+ for(let x of [-.22,.22]){let leg=new THREE.Mesh(new THREE.BoxGeometry(.24,.72,.3),mat(0x172b4a));leg.position.set(x,.38,0);player.add(leg)}
+ player.position.set(0,0,4);scene.add(player);
+ clock=new THREE.Clock();addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight)});
+}
+function sixty(){return 60}
+function makeObj(type,l,z){let g=new THREE.Group();if(type==='coin'){let c=new THREE.Mesh(new THREE.TorusGeometry(.42,.13,10,24),new THREE.MeshStandardMaterial({color:0xffc928,metalness:.65,roughness:.25,emissive:0x5a3300}));c.rotation.y=Math.PI/2;c.position.y=1.05;g.add(c)}else{let m=new THREE.Mesh(new THREE.BoxGeometry(type==='bar'?1.45:1.15,type==='bar'?.6:1.65,.9),mat(type==='bar'?0xffbd42:0xe94e5a));m.position.y=type==='bar'?.35:.82;g.add(m);let cap=new THREE.Mesh(new THREE.BoxGeometry(1.2,.12,1),mat(0xffa2a2));cap.position.y=type==='bar'?.65:1.68;g.add(cap)}g.position.set(laneX[l],0,z);scene.add(g);objects.push({mesh:g,type,lane:l,hit:false})}
+function clearObjects(){objects.forEach(o=>scene.remove(o.mesh));objects=[]}
+function start(){clearObjects();state='play';lane=target=1;jump=jumpV=0;dist=0;coins=0;speed=17;spawn=.8;player.position.set(0,0,4);$('menu').classList.add('hidden');$('finish').classList.add('hidden');hud();clock.getDelta()}
+function shift(n){if(state==='play')target=Math.max(0,Math.min(2,target+n))}
+function doJump(){if(state==='play'&&jump<=0){jumpV=9.2}}
+function finish(){state='finish';let earned=Math.floor(dist/10)+coins*5;points+=earned;best=Math.max(best,Math.floor(dist));localStorage.fg_points=points;localStorage.fg_best=best;hud();$('fScore').textContent=Math.floor(dist)+' m';$('fEarn').textContent=earned+' ⭐';$('finish').classList.remove('hidden')}
+$('left').onpointerdown=e=>{e.preventDefault();shift(-1)};$('right').onpointerdown=e=>{e.preventDefault();shift(1)};$('jump').onpointerdown=e=>{e.preventDefault();doJump()};
+$('start').onclick=start;$('retry').onclick=start;$('back').onclick=()=>{$('finish').classList.add('hidden');$('menu').classList.remove('hidden');state='menu'};
+let sx=0,sy=0;$('scene').addEventListener('pointerdown',e=>{sx=e.clientX;sy=e.clientY});$('scene').addEventListener('pointerup',e=>{let dx=e.clientX-sx,dy=e.clientY-sy;if(Math.abs(dx)>28&&Math.abs(dx)>Math.abs(dy))shift(dx>0?1:-1);else if(dy<-25)doJump()});
+addEventListener('keydown',e=>{if(e.key==='ArrowLeft')shift(-1);if(e.key==='ArrowRight')shift(1);if(e.key==='ArrowUp'||e.key===' ')doJump()});
+function shop(){return `<b>TIENDA DE PREMIOS</b><div class="rowitem"><span>🎨 Traje azul (demo)</span><b>50 ⭐</b></div><div class="rowitem"><span>✨ Efecto brillante (demo)</span><b>100 ⭐</b></div><p>En esta versión son artículos demostrativos. Próximamente se conectarán a inventario real.</p><button class="btn alt" id="buy1">Desbloquear traje · 50 puntos</button><button class="btn alt" id="buy2">Desbloquear efecto · 100 puntos</button>`}
+function profile(){return `<b>PERFIL LOCAL</b><div class="rowitem"><span>Jugador</span><b>Fernando</b></div><div class="rowitem"><span>Mejor distancia</span><b>${best} m</b></div><div class="rowitem"><span>Saldo de puntos</span><b>${points} ⭐</b></div><p>Tu progreso se guarda en este navegador y dispositivo.</p>`}
+function ranking(){let arr=JSON.parse(localStorage.fg_scores||'[]');return `<b>CLASIFICACIÓN DE ESTE DISPOSITIVO</b><div class="rowitem"><span>🥇 Fernando</span><b>${best} m</b></div>${arr.map((v,i)=>`<div class="rowitem"><span>${i+2}. Carrera anterior</span><b>${v} m</b></div>`).join('')}<p>La clasificación global entre jugadores necesita servidor y cuentas online.</p>`}
+document.querySelectorAll('.tab').forEach(b=>b.onclick=()=>{document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));b.classList.add('active');let p=b.dataset.page;$('panel').innerHTML=p==='shop'?shop():p==='rank'?ranking():profile();let a=$('buy1'),c=$('buy2');if(a)a.onclick=()=>buy(50,'traje');if(c)c.onclick=()=>buy(100,'efecto')});
+function buy(cost,name){if(points<cost){toast('Te faltan puntos');return}points-=cost;localStorage.fg_points=points;hud();toast('¡'+name+' desbloqueado! (demo)')}
+function animate(){requestAnimationFrame(animate);let dt=Math.min(clock.getDelta(),.04);if(state==='play'){
+ dist+=dt*speed*.55;speed=Math.min(29,speed+dt*.12);spawn-=dt;if(spawn<=0){let l=Math.floor(Math.random()*3);makeObj(Math.random()<.58?'coin':(Math.random()<.5?'block':'bar'),l,-65);spawn=Math.max(.58,1.12-dist/2500)+Math.random()*.25}
+ player.position.x+=(laneX[target]-player.position.x)*Math.min(1,dt*12);player.position.y=jump;player.rotation.z=(laneX[target]-player.position.x)*-.035;
+ jump=Math.max(0,jump+jumpV*dt);if(jump>0)jumpV-=22*dt;if(jump<0){jump=0;jumpV=0}
+ for(let o of objects){o.mesh.position.z+=speed*dt;if(o.type==='coin')o.mesh.rotation.y+=dt*3;if(!o.hit&&o.mesh.position.z>2.7&&o.mesh.position.z<4.8&&o.lane===target){if(o.type==='coin'){o.hit=true;coins++;scene.remove(o.mesh);toast('+1 moneda')}else if(jump<.95){o.hit=true;finish();break}else{o.hit=true}}}
+ objects=objects.filter(o=>{if(o.hit||o.mesh.position.z>12){scene.remove(o.mesh);return false}return true});hud();
+ }
+ renderer.render(scene,camera)}
+init3D();hud();animate();
+})();
+</script></body></html>
